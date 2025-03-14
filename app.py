@@ -6,13 +6,12 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 
-# Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = (
     f"postgresql://{os.getenv('DB_USERNAME')}:{os.getenv('DB_PASSWORD')}"
-    f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
+    f"@{os.getenv('DB_HOST')}/{os.getenv('TEST_DB_NAME') if app.config.get('TESTING') else os.getenv('DB_NAME')}"
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -63,8 +62,9 @@ def add_contact():
         return jsonify({'error': 'Please fill in all contact details'}), 400
     if data['individual_id'] == data['contact_id']:
         return jsonify({'error': 'A person can’t be their own contact'}), 400
-    person1 = Individual.query.get(data['individual_id'])
-    person2 = Individual.query.get(data['contact_id'])
+    # Use Session.get() instead of Query.get()
+    person1 = db.session.get(Individual, data['individual_id'])
+    person2 = db.session.get(Individual, data['contact_id'])
     if not person1:
         return jsonify({'error': f"No person found with ID {data['individual_id']}"}), 404
     if not person2:
