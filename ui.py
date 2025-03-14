@@ -52,7 +52,6 @@ if st.button("Trace"):
         if not data['direct'] and not data['predicted']:
             st.info("No contacts found for this person.")
 
-        # Graph visualization
         try:
             graph = data['graph']
             G = nx.Graph()
@@ -61,7 +60,7 @@ if st.button("Trace"):
             for edge in graph['edges']:
                 G.add_edge(edge['source'], edge['target'], date=edge['date'])
 
-            pos = nx.circular_layout(G)  # Better spread
+            pos = nx.spring_layout(G, k=0.5, iterations=50)
 
             edge_x = []
             edge_y = []
@@ -85,7 +84,6 @@ if st.button("Trace"):
             node_y = [pos[node['unique_id']][1] for node in graph['nodes']]
             node_text = [f"{node['unique_id']}" for node in graph['nodes']]
             node_hover = [f"ID: {node['id']}<br>Contacts: {node['contacts']}" for node in graph['nodes']]
-            # Color nodes: green for traced, blue for direct, orange for predicted
             node_colors = []
             direct_ids = [c['contact_id'] for c in data['direct']]
             predicted_ids = [next(n['id'] for n in graph['nodes'] if n['unique_id'] == p['unique_id']) for p in
@@ -122,6 +120,16 @@ if st.button("Trace"):
                                 height=600
                             ))
             st.plotly_chart(fig)
+
+            # Color legend in expander
+            with st.expander("Show Color Legend"):
+                st.markdown("""
+                - <span style='color: green'>●</span> Traced person ({})
+                - <span style='color: blue'>●</span> Direct contacts
+                - <span style='color: orange'>●</span> Predicted contacts (AI)
+                - <span style='color: LightSkyBlue'>●</span> Other individuals
+                """.format(trace_id), unsafe_allow_html=True)
+
         except Exception as e:
             st.error(f"Oops, couldn’t draw the graph: {str(e)}")
     else:
