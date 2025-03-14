@@ -5,6 +5,10 @@ import networkx as nx
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import pickle
+import numpy as np
+
+from ui import contact_id
 
 load_dotenv()
 
@@ -15,6 +19,10 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# Load the trained model
+with open('contact_model.pkl', 'rb') as f:
+    CONTACT_MODEL = pickle.load(f)
 
 
 class Individual(db.Model):
@@ -62,7 +70,6 @@ def add_contact():
         return jsonify({'error': 'Please fill in all contact details'}), 400
     if data['individual_id'] == data['contact_id']:
         return jsonify({'error': 'A person can’t be their own contact'}), 400
-    # Use Session.get() instead of Query.get()
     person1 = db.session.get(Individual, data['individual_id'])
     person2 = db.session.get(Individual, data['contact_id'])
     if not person1:
@@ -94,21 +101,27 @@ def get_contacts(unique_id):
     for c in all_contacts:
         G.add_edge(individuals[c.individual_id], individuals[c.contact_id], date=str(c.contact_date))
 
-    direct_contacts = Contact.query.filter_by(individual_id=person.id).all()
-    direct = [{'contact_id': c.contact_id, 'date': str(c.contact_date)} for c in direct_contacts]
+    direct_outgoing = Contact.query.filter_by(individual_id=person.id).all()
+    direct_incoming = Contact.query.filter_by(contact_id=person.id).all()
+    direct_contacts = direct_outgoing + direct_incoming
+    direct = [{'contact_id': c.contact_id, 'date': str(c.contact_date)} if c.individual_id == person.id
+              else {'contact_id': c.individual_id, 'date': str(c.contact_date)}
+              for c in direct_contacts]
 
     predicted = {}
     if person.unique_id in G:
         today = datetime.now().date()
+        direct_uids = [individuals[c.contact_id] for c in direct_contacts]
         for neighbor in G.neighbors(person.unique_id):
             for second_neighbor in G.neighbors(neighbor):
-                if second_neighbor != person.unique_id and second_neighbor not in [individuals[c.contact_id] for c in
-                                                                                   direct_contacts]:
+                if second_neighbor != person.unique_id and second_neighbor not in direct_uids:
+                    # Features for AI: [neighbor’s contact count, days since last contact]
                     neighbor_contacts = len(list(G.neighbors(neighbor)))
                     contact_dates = [c.contact_date for c in all_contacts if
                                      individuals[c.individual_id] == neighbor or individuals[c.contact_id] == neighbor]
-                    recency = max([1 - (today - d).days / 30 for d in contact_dates], default=0)
-                    confidence = min(0.5 * neighbor_contacts / 5 + 0.5 * recency, 0.95)
+                    days_ago = min([(today - d).days for d in contact_dates], default=30)
+                    features = np.array([[neighbor_contacts, days_ago]])
+                    confidence = CONTACT_MODEL.predict_proba(features)[0][1]  # Probability of contact
                     predicted[second_neighbor] = round(confidence, 2)
 
     nodes = [{'id': i.id, 'unique_id': i.unique_id,
