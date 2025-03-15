@@ -1,5 +1,4 @@
 .env
-*.pkl
 __pycache__/*
 *.npz
 *.ipynb
