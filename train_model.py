@@ -3,7 +3,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score
 import pickle
-from typing import BinaryIO
 
 # Load data
 data = np.load('contact_data.npz')
@@ -34,7 +33,8 @@ print(f"Cross-validation scores: {cv_scores}")
 print(f"Average CV accuracy: {cv_scores.mean():.2f} (+/- {cv_scores.std() * 2:.2f})")
 
 # Feature importance
-print("Feature importance:", dict(zip(['direct_contacts', 'days_since_last', 'mutual_contacts'], model.feature_importances_)))
+print("Feature importance:",
+      dict(zip(['direct_contacts', 'days_since_last', 'mutual_contacts'], model.feature_importances_)))
 
 # Save
 with open('contact_model.pkl', 'wb') as f:  # type: BinaryIO

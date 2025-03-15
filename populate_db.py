@@ -53,7 +53,9 @@ for contact in contacts:
             f"{BASE_URL}/add_contact",
             json={"individual_id": ind_id, "contact_id": cont_id, "contact_date": contact['contact_date']}
         )
-        print(f"Added contact {contact['individual_id']} -> {contact['contact_id']} on {contact['contact_date']}: {response.status_code}")
+        print(
+            f"Added contact {contact['individual_id']} -> {contact['contact_id']} "
+            f"on {contact['contact_date']}: {response.status_code}")
     else:
         print(f"Skipped contact {contact['individual_id']} -> {contact['contact_id']}—missing ID")
 

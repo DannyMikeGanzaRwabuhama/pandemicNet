@@ -12,12 +12,12 @@ import queue
 
 load_dotenv()
 
-
 # Configure Gemini
 genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
 model = genai.GenerativeModel('gemini-2.0-flash')
 
-def generate_explanation(unique_id, confidence, contacts, days, mutuals, result_queue):
+
+def generate_explanation(unique_id, confidence, contacts, days, mutuals, result_container):
     try:
         prompt = (
             f"Craft a fun, short explanation for meeting {unique_id} with {confidence:.2f} confidence, "
@@ -25,17 +25,27 @@ def generate_explanation(unique_id, confidence, contacts, days, mutuals, result_
         )
         response = model.generate_content(prompt)
         result_queue.put((unique_id, response.text.strip()))
-    except Exception as e:
+    except Exception:
         # Fallback to mock if Gemini fails
         vibe = "hot" if confidence >= 0.7 else "maybe" if confidence >= 0.5 else "wild guess"
         days_str = f"{days} day{'s' if days != 1 else ''} ago"
         mutual_str = f"{mutuals} shared connection{'s' if mutuals != 1 else ''}"
         text = random.choice([
-            f"{vibe.capitalize()} tip: {unique_id} might’ve crossed paths! {contacts} moves, {days_str}. Odds: {confidence:.2f}.",
-            f"Check it: {contacts} hits in {days_str} tie {unique_id} to you. {mutual_str}—{vibe} shot at {confidence:.2f}!",
-            f"{vibe.upper()} ALERT: {unique_id}’s {contacts} links {days_str}, {mutual_str}. Confidence: {confidence:.2f}!"
+            f"{vibe.capitalize()} tip: {unique_id} might’ve crossed paths! {
+                contacts} moves, {days_str}. Odds: {confidence:.2f}.",
+            f"Check it: {contacts} hits in {days_str} tie {unique_id} to you. {
+                mutual_str}—{vibe} shot at {confidence:.2f}!",
+            f"{vibe.upper()} ALERT: {unique_id}’s {contacts} links {days_str}, {
+                mutual_str}. Confidence: {confidence:.2f}!"
         ])
-        result_queue.put((unique_id, text))
+
+        if isinstance(result_container, dict):
+            result_container[unique_id] = text
+        elif isinstance(result_container, queue.Queue):
+            result_container.put((unique_id, text))
+        else:
+            raise ValueError("result_container must be dict or Queue")
+
 
 st.title("PandemicNet MVP Demo")
 
@@ -151,7 +161,7 @@ if st.button("Trace"):
                                 yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                                 width=600,
                                 height=600
-                            ))
+            ))
             st.plotly_chart(fig)
 
             # Color legend in expander

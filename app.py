@@ -86,12 +86,14 @@ def add_contact():
             return jsonify({'error': 'This contact is already logged for today'}), 409
         return jsonify({'error': f"Oops, something went wrong on our end: {str(e)}"}), 500
 
+
 @app.route('/person/<unique_id>', methods=['GET'])
 def get_person(unique_id):
     person = Individual.query.filter_by(unique_id=unique_id).first()
     if not person:
         return jsonify({'error': 'No person found with that ID'}), 404
     return jsonify({'id': person.id, 'unique_id': person.unique_id, 'phone_number': person.phone_number}), 200
+
 
 @app.route('/contacts/<unique_id>', methods=['GET'])
 def get_contacts(unique_id):
