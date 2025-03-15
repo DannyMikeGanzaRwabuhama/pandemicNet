@@ -1,8 +1,41 @@
 import streamlit as st
+import random
 import requests
 import datetime
 import plotly.graph_objects as go
 import networkx as nx
+from dotenv import load_dotenv
+import os
+import google.generativeai as genai
+import threading
+import queue
+
+load_dotenv()
+
+
+# Configure Gemini
+genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+model = genai.GenerativeModel('gemini-2.0-flash')
+
+def generate_explanation(unique_id, confidence, contacts, days, mutuals, result_queue):
+    try:
+        prompt = (
+            f"Craft a fun, short explanation for meeting {unique_id} with {confidence:.2f} confidence, "
+            f"{contacts} contacts, {days} days ago, {mutuals} mutual connections."
+        )
+        response = model.generate_content(prompt)
+        result_queue.put((unique_id, response.text.strip()))
+    except Exception as e:
+        # Fallback to mock if Gemini fails
+        vibe = "hot" if confidence >= 0.7 else "maybe" if confidence >= 0.5 else "wild guess"
+        days_str = f"{days} day{'s' if days != 1 else ''} ago"
+        mutual_str = f"{mutuals} shared connection{'s' if mutuals != 1 else ''}"
+        text = random.choice([
+            f"{vibe.capitalize()} tip: {unique_id} might’ve crossed paths! {contacts} moves, {days_str}. Odds: {confidence:.2f}.",
+            f"Check it: {contacts} hits in {days_str} tie {unique_id} to you. {mutual_str}—{vibe} shot at {confidence:.2f}!",
+            f"{vibe.upper()} ALERT: {unique_id}’s {contacts} links {days_str}, {mutual_str}. Confidence: {confidence:.2f}!"
+        ])
+        result_queue.put((unique_id, text))
 
 st.title("PandemicNet MVP Demo")
 
@@ -45,13 +78,14 @@ if st.button("Trace"):
     response = requests.get(f"http://localhost:5000/contacts/{trace_id}")
     if response.status_code == 200:
         data = response.json()
+
+        # Direct contacts
         if data['direct']:
             st.write("Direct contacts:", data['direct'])
-        if data['predicted']:
-            st.write("Predicted contacts:", data['predicted'])
-        if not data['direct'] and not data['predicted']:
-            st.info("No contacts found for this person.")
+        else:
+            st.info("No direct contacts found.")
 
+        # Graph
         try:
             graph = data['graph']
             G = nx.Graph()
@@ -59,7 +93,6 @@ if st.button("Trace"):
                 G.add_node(node['unique_id'])
             for edge in graph['edges']:
                 G.add_edge(edge['source'], edge['target'], date=edge['date'])
-
             pos = nx.spring_layout(G, k=0.5, iterations=50)
 
             edge_x = []
@@ -129,9 +162,55 @@ if st.button("Trace"):
                 - <span style='color: orange'>●</span> Predicted contacts (AI)
                 - <span style='color: LightSkyBlue'>●</span> Other individuals
                 """.format(trace_id), unsafe_allow_html=True)
-
         except Exception as e:
             st.error(f"Oops, couldn’t draw the graph: {str(e)}")
+
+        # Predicted contacts with spinner
+        if data['predicted']:
+            st.subheader("Predicted Contacts")
+            explanations = {}
+            threads = []
+
+            # Predicted contacts
+            if data['predicted']:
+                st.subheader("Predicted Contacts")
+                result_queue = queue.Queue()
+                threads = []
+
+                with st.spinner("🔄 Crunching AI predictions..."):
+                    for pred in data['predicted']:
+                        confidence = pred['confidence']
+                        explanation = data['explanations'][pred['unique_id']].split(": ", 1)[1]
+                        parts = [part.split(' (')[0] for part in explanation.split(', ')]
+                        if len(parts) != 4:
+                            st.error(f"Explanation parse error: {parts}")
+                            continue
+                        contacts, days, mutuals, conf = parts
+                        contacts, days, mutuals = int(contacts.split('=')[1]), int(days.split('=')[1]), int(
+                            mutuals.split('=')[1])
+
+                        thread = threading.Thread(
+                            target=generate_explanation,
+                            args=(pred['unique_id'], confidence, contacts, days, mutuals, result_queue)
+                        )
+                        threads.append(thread)
+                        thread.start()
+
+                    # Timeout after 10 seconds
+                    for thread in threads:
+                        thread.join(timeout=10)
+                    explanations = dict(result_queue.queue)  # Get what’s done
+
+                for pred in data['predicted']:
+                    confidence = pred['confidence']
+                    color = "green" if confidence >= 0.7 else "orange" if confidence >= 0.5 else "red"
+                    with st.expander(f"{pred['unique_id']} (Confidence: {confidence})"):
+                        dynamic_text = explanations.get(pred['unique_id'], "AI timed out—using fallback!")
+                        st.markdown(f":{color}[●] {dynamic_text}")
+
+            if not data['direct'] and not data['predicted']:
+                st.info("No contacts found for this person.")
+
     else:
         try:
             error_msg = response.json().get('error', 'Unknown error from server')

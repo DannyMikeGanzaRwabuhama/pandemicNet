@@ -8,8 +8,6 @@ import os
 import pickle
 import numpy as np
 
-from ui import contact_id
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -88,6 +86,12 @@ def add_contact():
             return jsonify({'error': 'This contact is already logged for today'}), 409
         return jsonify({'error': f"Oops, something went wrong on our end: {str(e)}"}), 500
 
+@app.route('/person/<unique_id>', methods=['GET'])
+def get_person(unique_id):
+    person = Individual.query.filter_by(unique_id=unique_id).first()
+    if not person:
+        return jsonify({'error': 'No person found with that ID'}), 404
+    return jsonify({'id': person.id, 'unique_id': person.unique_id, 'phone_number': person.phone_number}), 200
 
 @app.route('/contacts/<unique_id>', methods=['GET'])
 def get_contacts(unique_id):
@@ -109,20 +113,32 @@ def get_contacts(unique_id):
               for c in direct_contacts]
 
     predicted = {}
+    explanations = {}
     if person.unique_id in G:
         today = datetime.now().date()
-        direct_uids = [individuals[c.contact_id] for c in direct_contacts]
+        direct_uids = [individuals[c.contact_id] if c.individual_id == person.id else individuals[c.individual_id]
+                       for c in direct_contacts]
         for neighbor in G.neighbors(person.unique_id):
             for second_neighbor in G.neighbors(neighbor):
                 if second_neighbor != person.unique_id and second_neighbor not in direct_uids:
-                    # Features for AI: [neighbor’s contact count, days since last contact]
+                    # Features for AI: [neighbor_contacts, days_ago, mutual_contacts]
                     neighbor_contacts = len(list(G.neighbors(neighbor)))
                     contact_dates = [c.contact_date for c in all_contacts if
                                      individuals[c.individual_id] == neighbor or individuals[c.contact_id] == neighbor]
                     days_ago = min([(today - d).days for d in contact_dates], default=30)
-                    features = np.array([[neighbor_contacts, days_ago]])
-                    confidence = CONTACT_MODEL.predict_proba(features)[0][1]  # Probability of contact
+                    mutual_contacts = len(set(G.neighbors(person.unique_id)) & set(G.neighbors(second_neighbor)))
+                    features = np.array([[neighbor_contacts, days_ago, mutual_contacts]])
+                    confidence = CONTACT_MODEL.predict_proba(features)[0][1]
+                    explanation = (
+                        f"Predicted {second_neighbor} via {neighbor}: "
+                        f"Contacts={neighbor_contacts} (high activity boosts chance), "
+                        f"Days ago={days_ago} (recent is better), "
+                        f"Mutuals={mutual_contacts} (shared ties help),  "
+                        f"Confidence={confidence:.2f}"
+                    )
+                    print(explanation)
                     predicted[second_neighbor] = round(confidence, 2)
+                    explanations[second_neighbor] = explanation
 
     nodes = [{'id': i.id, 'unique_id': i.unique_id,
               'contacts': len(list(G.neighbors(i.unique_id))) if i.unique_id in G else 0}
@@ -133,6 +149,7 @@ def get_contacts(unique_id):
     return jsonify({
         'direct': direct,
         'predicted': [{'unique_id': uid, 'confidence': conf} for uid, conf in predicted.items()],
+        'explanations': explanations,
         'graph': {'nodes': nodes, 'edges': edges}
     })
 
