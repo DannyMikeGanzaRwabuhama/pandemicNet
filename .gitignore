@@ -1,4 +1,6 @@
 .env
-__pycache__/*
+*.pkl
+__pycache__/
+*.npz
 *.ipynb
 .venv/
