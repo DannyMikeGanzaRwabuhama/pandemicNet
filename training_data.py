@@ -1,4 +1,13 @@
 import numpy as np
+import os
+
+if not os.path.exists('contact_data.npz'):
+    X = np.random.rand(100, 3)  # Mock: contacts, days, mutuals
+    y = np.random.randint(0, 2, 100)  # Mock: predictions
+    np.savez('contact_data.npz', X=X, y=y)
+else:
+    data = np.load('contact_data.npz')
+    X, y = data['X'], data['y']
 
 np.random.seed(42)
 n_samples = 1000
