@@ -58,13 +58,28 @@ PandemicNet is a contact tracing tool designed for low-tech environments, inspir
 - **Add a Contact**: Input two person IDs and a date.
 - **Trace Contacts**: Enter a unique ID to see direct contacts and the graph.
 
+## Demo
+- Train AI: `python train_model.py`
+- Populate DB: `python populate_db.py`
+- Open `http://localhost:8501`, trace `user4`—see direct, predicted contacts, and graph.
+
 ## Example
 - Add `user1`, `user2`, `user3`.
 - Log contacts: `user1` → `user2`, `user2` → `user3`.
 - Trace `user1`: See `user2` as a direct contact and a graph linking all three.
 
+## Setup
+- Add `GOOGLE_API_KEY` to `.env`
+
+**Run**:
+```bash
+chmod +x start.sh
+docker build -t pandemicnet .
+docker run -p 5000:5000 -p 8501:8501 pandemicnet
+```
+
 ## Next Steps
-- Integrate a machine learning model for contact prediction.
+- Integrate a machine learning model for contact prediction (Done).
 - Add SMS-based input for low-tech access.
 - Support multiple languages (e.g., Kinyarwanda).
 

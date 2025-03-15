@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+    branches: [feature/ai-prediction, main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - run: pip install flake8 autopep8
+      - name: Auto-fix linting
+        run: autopep8 --in-place --aggressive --max-line-length 120 *.py
+      - name: Check linting
+        run: flake8 . --max-line-length=120 --exclude=__pycache__,tests,.venv
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker image
+        run: docker build -t pandemicnet .
